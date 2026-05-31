@@ -1,4 +1,4 @@
-const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001','https://stranger-play-chat.netlify.app'];
+const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001','https://strangers-play-frontend.onrender.com'];
 
 const normalizeOrigins = (value) => {
   if (!value) return [];
