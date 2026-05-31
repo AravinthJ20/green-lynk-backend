@@ -234,7 +234,8 @@ module.exports = (io) => {
           username: user.username,
           avatar: user.avatar
         },
-        type
+        type,
+        offer: offer || null
       });
     });
 

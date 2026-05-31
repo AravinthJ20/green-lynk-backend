@@ -1,11 +1,15 @@
-const parseOrigins = (value, fallback) => {
-  const resolved = value || fallback;
-  if (!resolved) return ['http://localhost:3000'];
+const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 
-  return resolved
-    .split(',')
+const parseOrigins = (value, fallback) => {
+  const sources = [value, fallback]
+    .filter(Boolean)
+    .flatMap((entry) => entry.split(','))
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+  if (sources.length === 0) return defaultOrigins;
+
+  return [...new Set([...defaultOrigins, ...sources])];
 };
 
 module.exports = {

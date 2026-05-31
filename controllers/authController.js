@@ -13,6 +13,7 @@ const createInviteTransport = () => {
   const smtpPort = process.env.SMTP_PORT;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
+  const allowSelfSigned = process.env.SMTP_ALLOW_SELF_SIGNED === 'true';
 
   if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
     throw new Error('Invite email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS.');
@@ -22,15 +23,32 @@ const createInviteTransport = () => {
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const nodemailer = require('nodemailer');
 
-  return nodemailer.createTransport({
-    host: smtpHost,
-    port: Number(smtpPort),
-    secure: Number(smtpPort) === 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass
-    }
-  });
+  // return nodemailer.createTransport({
+  //   host: smtpHost,
+  //   port: Number(smtpPort),
+  //   secure: Number(smtpPort) === 465,
+  //   auth: {
+  //     user: smtpUser,
+  //     pass: smtpPass
+  //   },
+  //   tls: allowSelfSigned
+  //     ? {
+  //         rejectUnauthorized: false
+  //       }
+  //     : undefined
+  // });
+return nodemailer.createTransport({
+  host: smtpHost,
+  port: Number(smtpPort),
+  secure: false,
+  auth: {
+    user: smtpUser,
+    pass: smtpPass
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 };
 
 exports.register = async (req, res) => {

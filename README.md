@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and update values.
+1. Copy `.env` to `.env` and update values.
 2. Install dependencies:
    ```bash
    npm install
