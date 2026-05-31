@@ -39,7 +39,14 @@ const hydrateAttachments = async (attachmentIds, ownerId) => {
   return attachments;
 };
 
-const populateMessageDetails = (message) => message.populate('sender', 'username avatar').populate('attachments');
+const populateMessageDetails = async (message) => {
+  await message.populate([
+    { path: 'sender', select: 'username avatar' },
+    { path: 'attachments' }
+  ]);
+
+  return message;
+};
 
 module.exports = (io) => {
   const activeCalls = new Map();
