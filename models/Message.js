@@ -15,7 +15,7 @@ const messageSchema = new mongoose.Schema({
   deliveredTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 });
 
-messageSchema.pre('validate', function (next) {
+messageSchema.pre('validate', function () {
   const hasContent = Boolean(this.content?.trim());
   const hasSticker = Boolean(this.sticker?.trim());
   const hasAttachments = Array.isArray(this.attachments) && this.attachments.length > 0;
@@ -23,8 +23,6 @@ messageSchema.pre('validate', function (next) {
   if (!hasContent && !hasSticker && !hasAttachments) {
     this.invalidate('content', 'A message requires text, sticker, or attachment');
   }
-
-  next();
 });
 
 module.exports = mongoose.model('Message', messageSchema);
