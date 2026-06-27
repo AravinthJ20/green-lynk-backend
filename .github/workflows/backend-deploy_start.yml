@@ -17,7 +17,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/strangers-play-backend
+            cd ~/green-lynk-backend
 
             echo "Pulling latest code..."
             git pull origin main
@@ -26,7 +26,7 @@ jobs:
             npm install
 
             echo "Starting or restarting application..."
-            pm2 restart strangers-play-backend || pm2 start server.js --name strangers-play-backend
+            pm2 restart green-lynk-backend || pm2 start server.js --name green-lynk-backend
 
             pm2 save
 
