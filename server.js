@@ -6,9 +6,11 @@ const cors = require('cors');
 const path = require('path');
 const socketIo = require('socket.io');
 const connectDB = require('./config/db');
-const { corsOrigins, port, statusFeatureEnabled } = require('./config/env');
+const { corsOrigins, port, statusFeatureEnabled, agentFeatureEnabled } = require('./config/env');
 const socketManager = require('./socket/socketManager');
+const { setIO } = require('./utils/realtime');
 const { startRequestReminderCron } = require('./utils/requestReminderCron');
+const { startAgentReminderCron } = require('./utils/agentReminderCron');
 
 const app = express();
 const corsOptions = {
@@ -34,9 +36,16 @@ app.use('/api/groups', require('./routes/group'));
 if (statusFeatureEnabled) {
   app.use('/api/status', require('./routes/status'));
 }
+if (agentFeatureEnabled) {
+  app.use('/api/agent', require('./routes/agent'));
+}
 
+setIO(io);
 socketManager(io);
 startRequestReminderCron();
+if (agentFeatureEnabled) {
+  startAgentReminderCron();
+}
 
 app.get('/', (req, res) => {
 res.json({ message: 'Green Lynk backend is running' });

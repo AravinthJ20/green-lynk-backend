@@ -46,6 +46,7 @@ module.exports = {
   frontendUrl: process.env.FRONTEND_URL || '',
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS, process.env.CORS_ORIGIN, process.env.FRONTEND_URL),
   statusFeatureEnabled: parseBoolean(process.env.STATUS_FEATURE_ENABLED, true),
+  agentFeatureEnabled: parseBoolean(process.env.AGENT_FEATURE_ENABLED, true),
   storageType: (process.env.STORAGE_TYPE || 'local').trim().toLowerCase(),
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',

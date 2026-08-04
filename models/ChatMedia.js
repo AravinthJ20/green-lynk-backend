@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const chatMediaSchema = new mongoose.Schema({
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  storageType: { type: String, enum: ['local', 'cloudinary'], required: true, default: 'local' },
-  bucketType: { type: String, enum: ['local', 'cloudinary'], required: true, default: 'local' },
+  storageType: { type: String, enum: ['local', 'cloudinary', 'external'], required: true, default: 'local' },
+  bucketType: { type: String, enum: ['local', 'cloudinary', 'external'], required: true, default: 'local' },
   storageId: { type: String, required: true, trim: true },
   fileName: { type: String, required: true, trim: true },
   originalName: { type: String, required: true, trim: true },

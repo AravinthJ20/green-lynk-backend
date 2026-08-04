@@ -3,11 +3,12 @@ const router = express.Router();
 const auth = require('../utils/auth');
 const User = require('../models/User');
 const { sanitizeSubscription } = require('../utils/push');
+const { resolveAvatarIdForProfileUpdate, resolveAvatarPublicUrl } = require('../utils/avatar');
 
 const publicFields =
-  'username email avatar online lastSeen connections connectionRequestsSent connectionRequestsReceived ignoredUsers rejectedUsers';
+  'username email avatar online lastSeen connections connectionRequestsSent connectionRequestsReceived ignoredUsers rejectedUsers premium';
 
-const profileFields = 'username email avatar online lastSeen';
+const profileFields = 'username email avatar online lastSeen premium';
 
 const toIdString = (value) => value.toString();
 
@@ -36,15 +37,16 @@ const getConnectionStatus = (viewer, targetId) => {
   return 'none';
 };
 
-const serializeUser = (user, viewer) => ({
+const serializeUser = async (user, viewer) => ({
   _id: user._id,
   username: user.username,
   email: user.email,
-  avatar: user.avatar,
+  avatar: await resolveAvatarPublicUrl(user.avatar),
   bio: user.bio || '',
   location: user.location || '',
   interests: Array.isArray(user.interests) ? user.interests : [],
   online: user.online,
+  premium: Boolean(user.premium),
   lastSeen: user.lastSeen,
   connectionStatus: viewer ? getConnectionStatus(viewer, user._id) : undefined
 });
@@ -56,18 +58,19 @@ const loadTargetUser = (userId) => User.findById(userId);
 router.get('/profile', auth, async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id).select(
-      'username email avatar bio location interests online lastSeen createdAt connections connectionRequestsSent connectionRequestsReceived'
+      'username email avatar bio location interests online lastSeen createdAt connections connectionRequestsSent connectionRequestsReceived premium'
     );
 
     res.json({
       _id: currentUser._id,
       username: currentUser.username,
       email: currentUser.email,
-      avatar: currentUser.avatar || '',
+      avatar: await resolveAvatarPublicUrl(currentUser.avatar),
       bio: currentUser.bio || '',
       location: currentUser.location || '',
       interests: Array.isArray(currentUser.interests) ? currentUser.interests : [],
       online: currentUser.online,
+      premium: Boolean(currentUser.premium),
       lastSeen: currentUser.lastSeen,
       createdAt: currentUser.createdAt,
       stats: {
@@ -112,8 +115,13 @@ router.patch('/profile', auth, async (req, res) => {
       return res.status(400).json({ error: 'Username already exists' });
     }
 
+    const resolvedAvatarId = await resolveAvatarIdForProfileUpdate({
+      ownerId: req.user._id,
+      avatar
+    });
+
     req.user.username = username;
-    req.user.avatar = avatar;
+    req.user.avatar = resolvedAvatarId;
     req.user.bio = bio;
     req.user.location = location;
     req.user.interests = normalizedInterests;
@@ -125,11 +133,12 @@ router.patch('/profile', auth, async (req, res) => {
         _id: req.user._id,
         username: req.user.username,
         email: req.user.email,
-        avatar: req.user.avatar || '',
+        avatar: await resolveAvatarPublicUrl(req.user.avatar),
         bio: req.user.bio || '',
         location: req.user.location || '',
         interests: req.user.interests || [],
         online: req.user.online,
+        premium: Boolean(req.user.premium),
         lastSeen: req.user.lastSeen,
         createdAt: req.user.createdAt
       }
@@ -143,7 +152,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const currentUser = await loadCurrentUser(req.user._id);
     const users = await User.find({ _id: { $in: currentUser.connections } }).select(profileFields);
-    res.json(users.map((user) => serializeUser(user, currentUser)));
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -153,7 +162,7 @@ router.get('/connections', auth, async (req, res) => {
   try {
     const currentUser = await loadCurrentUser(req.user._id);
     const users = await User.find({ _id: { $in: currentUser.connections } }).select(profileFields);
-    res.json(users.map((user) => serializeUser(user, currentUser)));
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -168,12 +177,12 @@ router.get('/requests', auth, async (req, res) => {
       .populate('connections', profileFields);
 
     res.json({
-      incoming: currentUser.connectionRequestsReceived.map((user) => serializeUser(user, currentUser)),
-      outgoing: currentUser.connectionRequestsSent.map((user) => serializeUser(user, currentUser)),
-      connections: currentUser.connections.map((user) => serializeUser(user, currentUser)),
-      received: currentUser.connectionRequestsReceived.map((user) => serializeUser(user, currentUser)),
-      sent: currentUser.connectionRequestsSent.map((user) => serializeUser(user, currentUser)),
-      accepted: currentUser.connections.map((user) => serializeUser(user, currentUser))
+      incoming: await Promise.all(currentUser.connectionRequestsReceived.map((user) => serializeUser(user, currentUser))),
+      outgoing: await Promise.all(currentUser.connectionRequestsSent.map((user) => serializeUser(user, currentUser))),
+      connections: await Promise.all(currentUser.connections.map((user) => serializeUser(user, currentUser))),
+      received: await Promise.all(currentUser.connectionRequestsReceived.map((user) => serializeUser(user, currentUser))),
+      sent: await Promise.all(currentUser.connectionRequestsSent.map((user) => serializeUser(user, currentUser))),
+      accepted: await Promise.all(currentUser.connections.map((user) => serializeUser(user, currentUser)))
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -191,7 +200,7 @@ router.get('/search', auth, async (req, res) => {
       _id: { $ne: req.user._id }
     }).select(profileFields);
 
-    res.json(users.map((user) => serializeUser(user, currentUser)));
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -213,7 +222,7 @@ router.get('/discover', auth, async (req, res) => {
         $nin: blockedIds
       }
     }).select(profileFields);
-    res.json(users.map((user) => serializeUser(user, currentUser)));
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -235,7 +244,56 @@ router.get('/feed', auth, async (req, res) => {
         $nin: hiddenIds
       }
     }).select(profileFields);
-    res.json(users.map((user) => serializeUser(user, currentUser)));
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/premium/insights', auth, async (req, res) => {
+  try {
+    if (!req.user.premium) {
+      return res.status(403).json({ error: 'Premium subscription required' });
+    }
+
+    res.json({
+      title: 'Premium AI Briefing',
+      summary: 'Your premium briefing is ready and highlights the best ways to make the most of Green Lynk.',
+      highlights: [
+        'Priority introductions with highly active people',
+        'Smart reminders for the best times to connect',
+        'A faster AI assistant experience for daily follow-ups'
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/premium/recommendations', auth, async (req, res) => {
+  try {
+    if (!req.user.premium) {
+      return res.status(403).json({ error: 'Premium subscription required' });
+    }
+
+    const currentUser = await loadCurrentUser(req.user._id);
+    const blockedIds = [
+      ...currentUser.connections,
+      ...currentUser.connectionRequestsSent,
+      ...currentUser.connectionRequestsReceived,
+      ...(currentUser.ignoredUsers || []),
+      ...(currentUser.rejectedUsers || [])
+    ];
+    const users = await User.find({
+      _id: {
+        $ne: req.user._id,
+        $nin: blockedIds
+      }
+    })
+      .select(profileFields)
+      .limit(4);
+
+    res.json(await Promise.all(users.map((user) => serializeUser(user, currentUser))));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -353,6 +411,16 @@ router.post('/connections/:userId/reject', auth, async (req, res) => {
 
     await Promise.all([currentUser.save(), targetUser.save()]);
     res.json({ status: 'rejected' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/premium/activate', auth, async (req, res) => {
+  try {
+    req.user.premium = true;
+    await req.user.save();
+    res.json({ status: 'premium_activated', premium: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
