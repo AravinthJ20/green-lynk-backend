@@ -1,0 +1,35 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/green-lynk-backend
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Installing packages..."
+            npm install
+
+            echo "Restarting application..."
+            pm2 restart green-lynk-backend || pm2 start server.js --name green-lynk-backend
+
+            pm2 save
+
+            echo "Deployment completed"
