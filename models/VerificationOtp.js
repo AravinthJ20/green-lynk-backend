@@ -9,6 +9,9 @@ const verificationOtpSchema = new mongoose.Schema({
     username: { type: String, trim: true, default: '' },
     password: { type: String, default: '' },
     inviteToken: { type: String, default: '' },
+    acceptedTerms: { type: Boolean, default: false },
+    termsAcceptedAt: { type: Date, default: null },
+    termsVersion: { type: String, default: '' },
     avatar: { type: String, default: '' },
     avatarMode: { type: String, default: 'url' },
     avatarUpload: {

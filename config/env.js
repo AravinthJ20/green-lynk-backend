@@ -39,12 +39,19 @@ const parseBoolean = (value, fallback = false) => {
   return ['true', '1', 'yes', 'on'].includes(String(value).trim().toLowerCase());
 };
 
+const parseNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 module.exports = {
   port: Number(process.env.PORT || 4000),
   jwtSecret: process.env.JWT_SECRET || 'green-lynk-secret',
   inviteSecret: process.env.INVITE_SECRET || process.env.JWT_SECRET || 'green-lynk-secret',
   frontendUrl: process.env.FRONTEND_URL || '',
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS, process.env.CORS_ORIGIN, process.env.FRONTEND_URL),
+  apiRateLimitWindowMs: parseNumber(process.env.API_RATE_LIMIT_WINDOW_MS, 60 * 1000),
+  apiRateLimitMaxRequests: parseNumber(process.env.API_RATE_LIMIT_MAX_REQUESTS, 120),
   statusFeatureEnabled: parseBoolean(process.env.STATUS_FEATURE_ENABLED, true),
   agentFeatureEnabled: parseBoolean(process.env.AGENT_FEATURE_ENABLED, true),
   storageType: (process.env.STORAGE_TYPE || 'local').trim().toLowerCase(),

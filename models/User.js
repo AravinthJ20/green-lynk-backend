@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 6 },
   avatar: { type: String, default: '' },
   premium: { type: Boolean, default: false },
+  termsAcceptedAt: { type: Date, default: null },
+  termsVersion: { type: String, default: '' },
   bio: { type: String, default: '', trim: true, maxlength: 280 },
   location: { type: String, default: '', trim: true, maxlength: 120 },
   interests: [{ type: String, trim: true }],

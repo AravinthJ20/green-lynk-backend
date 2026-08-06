@@ -11,7 +11,8 @@ const cleanup = () => {
   }
 };
 
-setInterval(cleanup, rateLimitWindowMs);
+const cleanupTimer = setInterval(cleanup, rateLimitWindowMs);
+cleanupTimer.unref?.();
 
 const aiRateLimiter = (req, res, next) => {
   const key = req.user?._id?.toString() || req.ip;

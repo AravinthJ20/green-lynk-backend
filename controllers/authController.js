@@ -12,6 +12,7 @@ const createInviteToken = ({ inviterId, inviterName, email }) =>
 const decodeInviteToken = (inviteToken) => jwt.verify(inviteToken, inviteSecret);
 const createOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 const OTP_EXPIRY_MINUTES = 10;
+const TERMS_VERSION = '2026-08-06';
 const normalizeMimeType = (value) => `${value || ''}`.split(';')[0].trim().toLowerCase();
 
 const resolveAvatarValue = async ({ avatar, avatarMode, avatarUpload }) => {
@@ -85,9 +86,13 @@ const sanitizeUser = (user) => {
 
 exports.requestRegistrationOtp = async (req, res) => {
   try {
-    const { username, email, password, inviteToken, avatar = '', avatarMode = 'url', avatarUpload = null } = req.body;
+    const { username, email, password, inviteToken, acceptedTerms, avatar = '', avatarMode = 'url', avatarUpload = null } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Missing fields' });
+    }
+
+    if (acceptedTerms !== true) {
+      return res.status(400).json({ error: 'Please accept the Terms & Conditions to register' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -113,6 +118,9 @@ exports.requestRegistrationOtp = async (req, res) => {
         username: username.trim(),
         password,
         inviteToken: inviteToken || '',
+        acceptedTerms: true,
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
         avatar: typeof avatar === 'string' ? avatar.trim() : '',
         avatarMode: avatarMode === 'upload' ? 'upload' : 'url',
         avatarUpload: avatarMode === 'upload' && avatarUpload
@@ -158,7 +166,11 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: 'OTP is invalid or expired' });
     }
 
-    const { username, password, inviteToken, avatar, avatarMode, avatarUpload } = verification.payload;
+    const { username, password, inviteToken, acceptedTerms, termsAcceptedAt, termsVersion, avatar, avatarMode, avatarUpload } = verification.payload;
+    if (acceptedTerms !== true) {
+      return res.status(400).json({ error: 'Terms acceptance is required to complete registration' });
+    }
+
     let invitePayload = null;
     if (inviteToken) {
       invitePayload = decodeInviteToken(inviteToken);
@@ -171,7 +183,14 @@ exports.register = async (req, res) => {
     if (existing) return res.status(400).json({ error: 'User already exists' });
 
     const resolvedAvatar = await resolveAvatarValue({ avatar, avatarMode, avatarUpload });
-    const user = new User({ username, email: normalizedEmail, password, avatar: resolvedAvatar });
+    const user = new User({
+      username,
+      email: normalizedEmail,
+      password,
+      avatar: resolvedAvatar,
+      termsAcceptedAt: termsAcceptedAt || new Date(),
+      termsVersion: termsVersion || TERMS_VERSION
+    });
     const token = createToken(user._id);
     user.tokens = [{ token }];
     await user.save();
