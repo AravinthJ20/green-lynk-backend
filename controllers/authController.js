@@ -13,6 +13,8 @@ const decodeInviteToken = (inviteToken) => jwt.verify(inviteToken, inviteSecret)
 const createOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 const OTP_EXPIRY_MINUTES = 10;
 const TERMS_VERSION = '2026-08-06';
+const MAX_FAILED_LOGIN_ATTEMPTS = 3;
+const LOGIN_LOCK_MINUTES = 15;
 const normalizeMimeType = (value) => `${value || ''}`.split(';')[0].trim().toLowerCase();
 
 const resolveAvatarValue = async ({ avatar, avatarMode, avatarUpload }) => {
@@ -222,13 +224,43 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = `${email || ''}`.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) return res.status(400).json({ error: 'Invalid credentials' });
 
+    if (user.loginLockUntil && user.loginLockUntil.getTime() > Date.now()) {
+      return res.status(423).json({
+        error: `Account locked due to too many failed login attempts. Try again after ${user.loginLockUntil.toLocaleString()}.`
+      });
+    }
+
+    if (user.loginLockUntil && user.loginLockUntil.getTime() <= Date.now()) {
+      user.failedLoginAttempts = 0;
+      user.loginLockUntil = null;
+      await user.save();
+    }
+
     const valid = await user.comparePassword(password);
-    if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!valid) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+
+      if (user.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        user.loginLockUntil = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000);
+        await user.save();
+        return res.status(423).json({
+          error: `Account locked due to too many failed login attempts. Try again after ${user.loginLockUntil.toLocaleString()}.`
+        });
+      }
+
+      await user.save();
+      return res.status(400).json({
+        error: `Invalid credentials. ${MAX_FAILED_LOGIN_ATTEMPTS - user.failedLoginAttempts} login attempt${MAX_FAILED_LOGIN_ATTEMPTS - user.failedLoginAttempts === 1 ? '' : 's'} remaining before lock.`
+      });
+    }
 
     const token = createToken(user._id);
+    user.failedLoginAttempts = 0;
+    user.loginLockUntil = null;
     user.tokens.push({ token });
     await user.save();
 
@@ -354,6 +386,8 @@ exports.resetPassword = async (req, res) => {
 
     user.password = password;
     user.tokens = [];
+    user.failedLoginAttempts = 0;
+    user.loginLockUntil = null;
     await user.save();
     await VerificationOtp.deleteMany({ purpose: 'reset-password', email: normalizedEmail });
 

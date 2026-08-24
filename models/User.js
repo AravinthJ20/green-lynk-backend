@@ -15,6 +15,8 @@ const userSchema = new mongoose.Schema({
   online: { type: Boolean, default: false },
   socketId: { type: String },
   lastSeen: { type: Date },
+  failedLoginAttempts: { type: Number, default: 0 },
+  loginLockUntil: { type: Date, default: null },
   connections: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   connectionRequestsSent: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   connectionRequestsReceived: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
