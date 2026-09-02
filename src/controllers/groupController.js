@@ -24,7 +24,7 @@ exports.createGroup = async (req, res) => {
     const group = new Group({ name, description: description || '', members: memberSet, admin: req.user._id });
     await group.save();
 
-    const groupData = await Group.findById(group._id).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const groupData = await Group.findById(group._id).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     res.status(201).json(serializeGroup(groupData));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -33,7 +33,7 @@ exports.createGroup = async (req, res) => {
 
 exports.getUserGroups = async (req, res) => {
   try {
-    const groups = await Group.find({ members: req.user._id }).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const groups = await Group.find({ members: req.user._id }).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     res.json(groups.map(serializeGroup));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -42,7 +42,7 @@ exports.getUserGroups = async (req, res) => {
 
 exports.getGroup = async (req, res) => {
   try {
-    const group = await Group.findOne({ _id: req.params.groupId, members: req.user._id }).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const group = await Group.findOne({ _id: req.params.groupId, members: req.user._id }).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     if (!group) return res.status(404).json({ error: 'Group not found' });
     res.json(serializeGroup(group));
   } catch (error) {
@@ -94,7 +94,7 @@ exports.addMembers = async (req, res) => {
     group.members.push(...newMembers);
     await group.save();
 
-    const groupData = await Group.findById(group._id).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const groupData = await Group.findById(group._id).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     res.json(serializeGroup(groupData));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -116,7 +116,7 @@ exports.updateGroup = async (req, res) => {
     group.description = nextDescription;
     await group.save();
 
-    const groupData = await Group.findById(group._id).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const groupData = await Group.findById(group._id).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     res.json(serializeGroup(groupData));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -135,7 +135,7 @@ exports.removeMember = async (req, res) => {
     group.members = group.members.filter((member) => member.toString() !== memberId.toString());
     await group.save();
 
-    const groupData = await Group.findById(group._id).populate('members', 'username avatar online').populate('admin', 'username avatar');
+    const groupData = await Group.findById(group._id).populate('members', 'username avatar online inMeeting').populate('admin', 'username avatar');
     res.json(serializeGroup(groupData));
   } catch (error) {
     res.status(500).json({ error: error.message });

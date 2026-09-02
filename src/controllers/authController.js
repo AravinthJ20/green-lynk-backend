@@ -1,7 +1,8 @@
 const User = require('../models/User');
 const VerificationOtp = require('../models/VerificationOtp');
 const jwt = require('jsonwebtoken');
-const { frontendUrl, inviteSecret, jwtSecret } = require('../config/env');
+const crypto = require('crypto');
+const { frontendUrl, googleOAuth, inviteSecret, jwtSecret } = require('../config/env');
 const { createMailTransport } = require('../utils/mail');
 const { uploadMediaBuffer } = require('../utils/mediaStorage');
 
@@ -16,6 +17,78 @@ const TERMS_VERSION = '2026-08-06';
 const MAX_FAILED_LOGIN_ATTEMPTS = 3;
 const LOGIN_LOCK_MINUTES = 15;
 const normalizeMimeType = (value) => `${value || ''}`.split(';')[0].trim().toLowerCase();
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+
+const resolveGoogleRedirectUri = () => (
+  googleOAuth.redirectUri ||
+  (frontendUrl ? `${frontendUrl.replace(/\/$/, '')}/auth/google/callback` : '')
+);
+
+const ensureGoogleConfigured = () => {
+  if (!googleOAuth.clientId || !googleOAuth.clientSecret || !resolveGoogleRedirectUri()) {
+    throw new Error('Google OAuth is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, and FRONTEND_URL.');
+  }
+};
+
+const createUniqueUsername = async ({ email, name }) => {
+  const rawBase = (name || email.split('@')[0] || 'greenlynk-user')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+  const base = rawBase || 'greenlynk-user';
+  let username = base;
+  let suffix = 1;
+
+  while (await User.findOne({ username })) {
+    username = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
+  return username;
+};
+
+const fetchJson = async (url, options) => {
+  if (typeof fetch !== 'function') {
+    throw new Error('Global fetch is unavailable. Run the backend on Node.js 18 or newer.');
+  }
+
+  const response = await fetch(url, options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error_description || body.error || 'Google OAuth request failed');
+  }
+
+  return body;
+};
+
+const connectInvitedUser = async ({ invitePayload, user }) => {
+  if (!invitePayload?.inviterId) return;
+
+  const inviter = await User.findById(invitePayload.inviterId);
+  if (!inviter || inviter._id.toString() === user._id.toString()) return;
+
+  inviter.connections = inviter.connections || [];
+  inviter.connectionRequestsSent = inviter.connectionRequestsSent || [];
+  inviter.connectionRequestsReceived = inviter.connectionRequestsReceived || [];
+  user.connections = user.connections || [];
+  user.connectionRequestsSent = user.connectionRequestsSent || [];
+  user.connectionRequestsReceived = user.connectionRequestsReceived || [];
+
+  if (!inviter.connections.some((entry) => entry.toString() === user._id.toString())) {
+    inviter.connections.push(user._id);
+  }
+  if (!user.connections.some((entry) => entry.toString() === inviter._id.toString())) {
+    user.connections.push(inviter._id);
+  }
+  inviter.connectionRequestsSent = inviter.connectionRequestsSent.filter((entry) => entry.toString() !== user._id.toString());
+  inviter.connectionRequestsReceived = inviter.connectionRequestsReceived.filter((entry) => entry.toString() !== user._id.toString());
+  user.connectionRequestsSent = user.connectionRequestsSent.filter((entry) => entry.toString() !== inviter._id.toString());
+  user.connectionRequestsReceived = user.connectionRequestsReceived.filter((entry) => entry.toString() !== inviter._id.toString());
+  await Promise.all([inviter.save(), user.save()]);
+};
 
 const resolveAvatarValue = async ({ avatar, avatarMode, avatarUpload }) => {
   const normalizedMode = avatarMode === 'upload' ? 'upload' : 'url';
@@ -198,22 +271,7 @@ exports.register = async (req, res) => {
     await user.save();
     await VerificationOtp.deleteMany({ purpose: 'register', email: normalizedEmail });
 
-    if (invitePayload?.inviterId) {
-      const inviter = await User.findById(invitePayload.inviterId);
-      if (inviter && inviter._id.toString() !== user._id.toString()) {
-        if (!inviter.connections.some((entry) => entry.toString() === user._id.toString())) {
-          inviter.connections.push(user._id);
-        }
-        if (!user.connections.some((entry) => entry.toString() === inviter._id.toString())) {
-          user.connections.push(inviter._id);
-        }
-        inviter.connectionRequestsSent = inviter.connectionRequestsSent.filter((entry) => entry.toString() !== user._id.toString());
-        inviter.connectionRequestsReceived = inviter.connectionRequestsReceived.filter((entry) => entry.toString() !== user._id.toString());
-        user.connectionRequestsSent = user.connectionRequestsSent.filter((entry) => entry.toString() !== inviter._id.toString());
-        user.connectionRequestsReceived = user.connectionRequestsReceived.filter((entry) => entry.toString() !== inviter._id.toString());
-        await Promise.all([inviter.save(), user.save()]);
-      }
-    }
+    await connectInvitedUser({ invitePayload, user });
 
     res.status(201).json({ user: sanitizeUser(user), token });
   } catch (error) {
@@ -267,6 +325,98 @@ exports.login = async (req, res) => {
     res.json({ user: sanitizeUser(user), token });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getGoogleAuthUrl = async (req, res) => {
+  try {
+    ensureGoogleConfigured();
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    const params = new URLSearchParams({
+      client_id: googleOAuth.clientId,
+      redirect_uri: resolveGoogleRedirectUri(),
+      response_type: 'code',
+      scope: 'openid email profile',
+      access_type: 'offline',
+      prompt: 'select_account'
+    });
+
+    if (state) {
+      params.set('state', state);
+    }
+
+    res.json({ url: `${GOOGLE_AUTH_URL}?${params.toString()}` });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Unable to start Google login' });
+  }
+};
+
+exports.handleGoogleCallback = async (req, res) => {
+  try {
+    ensureGoogleConfigured();
+    const { code, inviteToken } = req.body;
+    if (!code) return res.status(400).json({ error: 'Authorization code is required' });
+
+    const tokenData = await fetchJson(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: googleOAuth.clientId,
+        client_secret: googleOAuth.clientSecret,
+        redirect_uri: resolveGoogleRedirectUri(),
+        grant_type: 'authorization_code'
+      })
+    });
+
+    const profile = await fetchJson(GOOGLE_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+
+    if (!profile.email || profile.email_verified === false) {
+      return res.status(400).json({ error: 'Google account email must be verified' });
+    }
+
+    const normalizedEmail = profile.email.toLowerCase().trim();
+    let invitePayload = null;
+    if (inviteToken) {
+      invitePayload = decodeInviteToken(inviteToken);
+      if (invitePayload.email.toLowerCase() !== normalizedEmail) {
+        return res.status(400).json({ error: 'Invite email does not match Google account email' });
+      }
+    }
+
+    let user = await User.findOne({ $or: [{ googleId: profile.sub }, { email: normalizedEmail }] });
+
+    if (!user) {
+      user = new User({
+        username: await createUniqueUsername({ email: normalizedEmail, name: profile.name }),
+        email: normalizedEmail,
+        password: crypto.randomBytes(24).toString('hex'),
+        googleId: profile.sub,
+        authProviders: ['google'],
+        avatar: profile.picture || '',
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION
+      });
+    } else {
+      user.googleId = user.googleId || profile.sub;
+      user.authProviders = Array.from(new Set([...(user.authProviders || []), 'google']));
+      user.failedLoginAttempts = 0;
+      user.loginLockUntil = null;
+      if (!user.avatar && profile.picture) {
+        user.avatar = profile.picture;
+      }
+    }
+
+    const token = createToken(user._id);
+    user.tokens.push({ token });
+    await user.save();
+    await connectInvitedUser({ invitePayload, user });
+
+    res.json({ user: sanitizeUser(user), token });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Unable to complete Google login' });
   }
 };
 

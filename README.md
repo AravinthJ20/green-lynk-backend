@@ -12,6 +12,23 @@
    npm run dev
    ```
 
+### Google OAuth
+
+Create OAuth credentials in Google Cloud Console and add this authorized redirect URI:
+
+```bash
+http://localhost:3000/auth/google/callback
+```
+
+Set these backend environment variables:
+
+```bash
+FRONTEND_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+```
+
 ## AI Agent
 
 The Green Lynk agent uses a planner-tool-executor architecture:
@@ -34,6 +51,8 @@ OPENAI_MODEL=gpt-5-mini
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `GET /api/auth/google/url`
+- `POST /api/auth/google/callback`
 - `GET /api/auth/me`
 - `GET /api/users`
 - `GET /api/chat/chats`

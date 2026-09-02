@@ -2,6 +2,7 @@ const Message = require('../models/Message');
 const Group = require('../models/Group');
 const User = require('../models/User');
 const ChatMedia = require('../models/ChatMedia');
+const { resolveAvatarPublicUrl } = require('../utils/avatar');
 const { uploadMediaBuffer } = require('../utils/mediaStorage');
 
 const isConnected = async (userId, otherUserId) => {
@@ -103,13 +104,15 @@ exports.getChats = async (req, res) => {
       { $group: { _id: { $cond: [{ $eq: ['$sender', req.user._id] }, '$recipient', '$sender'] }, lastMessage: { $first: '$$ROOT' } } },
       { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
       { $unwind: '$user' },
-      { $project: { _id: '$user._id', username: '$user.username', avatar: '$user.avatar', online: '$user.online', lastSeen: '$user.lastSeen', lastMessage: 1 } }
-    ]).then((items) => items.filter((item) => allowedConnectionIds.has(item._id.toString())));
+      { $project: { _id: '$user._id', username: '$user.username', avatar: '$user.avatar', online: '$user.online', inMeeting: '$user.inMeeting', lastSeen: '$user.lastSeen', lastMessage: 1 } }
+    ])
+      .then((items) => items.filter((item) => allowedConnectionIds.has(item._id.toString())))
+      .then((items) => Promise.all(items.map(async (item) => ({ ...item, avatar: await resolveAvatarPublicUrl(item.avatar) }))));
 
     const groups = await Group.find({ members: req.user._id }).lean();
     const groupChats = await Promise.all(groups.map(async (group) => {
       const lastMessage = await Message.findOne({ group: group._id }).sort({ timestamp: -1 }).populate('sender', 'username avatar').lean();
-      return { _id: group._id, name: group.name, avatar: group.avatar, group: true, members: group.members, lastMessage };
+      return { _id: group._id, name: group.name, avatar: await resolveAvatarPublicUrl(group.avatar), group: true, members: group.members, lastMessage };
     }));
 
     const chats = [...individualChats, ...groupChats].sort((a, b) => {

@@ -49,6 +49,11 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'green-lynk-secret',
   inviteSecret: process.env.INVITE_SECRET || process.env.JWT_SECRET || 'green-lynk-secret',
   frontendUrl: process.env.FRONTEND_URL || '',
+  googleOAuth: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || ''
+  },
   corsOrigins: parseOrigins(process.env.CORS_ORIGINS, process.env.CORS_ORIGIN, process.env.FRONTEND_URL),
   apiRateLimitWindowMs: parseNumber(process.env.API_RATE_LIMIT_WINDOW_MS, 60 * 1000),
   apiRateLimitMaxRequests: parseNumber(process.env.API_RATE_LIMIT_MAX_REQUESTS, 120),

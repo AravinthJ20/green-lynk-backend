@@ -153,6 +153,23 @@ module.exports = (io) => {
   const activeCalls = new Map();
   const activeGroupCalls = new Map();
 
+  const updateUserPresence = async (userId, updates) => {
+    const updatedUser = await User.findByIdAndUpdate(userId, updates, { new: true }).select('online inMeeting lastSeen');
+    if (!updatedUser) return;
+
+    io.emit('user-status', {
+      userId: updatedUser._id.toString(),
+      online: Boolean(updatedUser.online),
+      inMeeting: Boolean(updatedUser.inMeeting),
+      lastSeen: updatedUser.lastSeen
+    });
+  };
+
+  const setMeetingStatus = async (userIds, inMeeting) => {
+    const uniqueIds = [...new Set((Array.isArray(userIds) ? userIds : [userIds]).filter(Boolean).map((entry) => entry.toString()))];
+    await Promise.all(uniqueIds.map((userId) => updateUserPresence(userId, { inMeeting })));
+  };
+
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
@@ -171,11 +188,11 @@ module.exports = (io) => {
 
   io.on('connection', async (socket) => {
     const user = socket.user;
-    await User.findByIdAndUpdate(user._id, { online: true, socketId: socket.id, lastSeen: new Date() });
+    await User.findByIdAndUpdate(user._id, { online: true, inMeeting: false, socketId: socket.id, lastSeen: new Date() });
 
     socket.join(user._id.toString());
 
-    io.emit('user-status', { userId: user._id.toString(), online: true, lastSeen: new Date() });
+    io.emit('user-status', { userId: user._id.toString(), online: true, inMeeting: false, lastSeen: new Date() });
 
     socket.on('join-group', async (groupId) => {
       const group = await Group.findById(groupId);
@@ -464,6 +481,7 @@ module.exports = (io) => {
       });
 
       socket.join(roomId);
+      await setMeetingStatus(user._id, true);
 
       const invitePayload = {
         callId,
@@ -506,6 +524,7 @@ module.exports = (io) => {
       const existingParticipantIds = [...groupCall.participantIds].filter((participantId) => participantId !== user._id.toString());
       groupCall.participantIds.add(user._id.toString());
       socket.join(groupCall.roomId);
+      await setMeetingStatus(user._id, true);
 
       const existingParticipants = await User.find({ _id: { $in: existingParticipantIds } }).select('username avatar');
       socket.emit('group-call-joined', {
@@ -550,21 +569,24 @@ module.exports = (io) => {
       });
     });
 
-    socket.on('group-call-leave', ({ callId }) => {
+    socket.on('group-call-leave', async ({ callId }) => {
       if (!callId) return;
       const groupCall = activeGroupCalls.get(callId);
       if (!groupCall) return;
 
       groupCall.participantIds.delete(user._id.toString());
       socket.leave(groupCall.roomId);
+      await setMeetingStatus(user._id, false);
       socket.to(groupCall.roomId).emit('group-call-participant-left', {
         callId,
         participantId: user._id.toString()
       });
 
       if (groupCall.hostId === user._id.toString() || groupCall.participantIds.size === 0) {
+        const remainingParticipantIds = [...groupCall.participantIds];
         io.to(groupCall.roomId).emit('group-call-ended', { callId });
         activeGroupCalls.delete(callId);
+        await setMeetingStatus(remainingParticipantIds, false);
       }
     });
 
@@ -583,6 +605,7 @@ module.exports = (io) => {
         requestedAt: new Date(),
         answeredAt: null
       });
+      await setMeetingStatus(user._id, true);
 
       io.to(recipient.socketId).emit('call-request', {
         callId,
@@ -608,6 +631,7 @@ module.exports = (io) => {
       const activeCall = activeCalls.get(callId);
       if (activeCall) {
         activeCall.answeredAt = new Date();
+        await setMeetingStatus([activeCall.callerId, activeCall.recipientId], true);
       }
 
       const recipient = await User.findById(recipientId);
@@ -630,6 +654,9 @@ module.exports = (io) => {
 
       const activeCall = activeCalls.get(callId);
       activeCalls.delete(callId);
+      if (activeCall) {
+        await setMeetingStatus([activeCall.callerId, activeCall.recipientId], false);
+      }
       const recipient = await User.findById(recipientId);
       if (recipient?.socketId) {
         io.to(recipient.socketId).emit('call-rejected', { callId });
@@ -655,6 +682,9 @@ module.exports = (io) => {
 
       const activeCall = activeCalls.get(callId);
       activeCalls.delete(callId);
+      if (activeCall) {
+        await setMeetingStatus([activeCall.callerId, activeCall.recipientId], false);
+      }
       const recipient = await User.findById(recipientId);
       if (recipient?.socketId) {
         io.to(recipient.socketId).emit('call-ended', { callId });

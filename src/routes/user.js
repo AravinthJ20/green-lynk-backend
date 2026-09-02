@@ -6,9 +6,9 @@ const { sanitizeSubscription } = require('../utils/push');
 const { resolveAvatarIdForProfileUpdate, resolveAvatarPublicUrl } = require('../utils/avatar');
 
 const publicFields =
-  'username email avatar online lastSeen connections connectionRequestsSent connectionRequestsReceived ignoredUsers rejectedUsers premium';
+  'username email avatar online inMeeting lastSeen connections connectionRequestsSent connectionRequestsReceived ignoredUsers rejectedUsers premium';
 
-const profileFields = 'username email avatar online lastSeen premium';
+const profileFields = 'username email avatar online inMeeting lastSeen premium';
 
 const toIdString = (value) => value.toString();
 
@@ -46,6 +46,7 @@ const serializeUser = async (user, viewer) => ({
   location: user.location || '',
   interests: Array.isArray(user.interests) ? user.interests : [],
   online: user.online,
+  inMeeting: Boolean(user.inMeeting),
   premium: Boolean(user.premium),
   lastSeen: user.lastSeen,
   connectionStatus: viewer ? getConnectionStatus(viewer, user._id) : undefined
@@ -58,7 +59,7 @@ const loadTargetUser = (userId) => User.findById(userId);
 router.get('/profile', auth, async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id).select(
-      'username email avatar bio location interests online lastSeen createdAt connections connectionRequestsSent connectionRequestsReceived premium'
+      'username email avatar bio location interests online inMeeting lastSeen createdAt connections connectionRequestsSent connectionRequestsReceived premium'
     );
 
     res.json({
@@ -70,6 +71,7 @@ router.get('/profile', auth, async (req, res) => {
       location: currentUser.location || '',
       interests: Array.isArray(currentUser.interests) ? currentUser.interests : [],
       online: currentUser.online,
+      inMeeting: Boolean(currentUser.inMeeting),
       premium: Boolean(currentUser.premium),
       lastSeen: currentUser.lastSeen,
       createdAt: currentUser.createdAt,

@@ -7,8 +7,8 @@ const removeId = (list, targetId) => list.filter((entry) => toIdString(entry) !=
 exports.getRequests = async (req, res) => {
   try {
     const currentUser = await User.findById(req.user._id)
-      .populate('connectionRequestsReceived', 'username email avatar online lastSeen')
-      .populate('connectionRequestsSent', 'username email avatar online lastSeen');
+      .populate('connectionRequestsReceived', 'username email avatar online inMeeting lastSeen')
+      .populate('connectionRequestsSent', 'username email avatar online inMeeting lastSeen');
 
     res.json({
       incoming: currentUser.connectionRequestsReceived,
