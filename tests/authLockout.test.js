@@ -1,11 +1,11 @@
-jest.mock('../models/User', () => ({
+jest.mock('../src/models/User', () => ({
   findOne: jest.fn()
 }));
 
-jest.mock('../models/VerificationOtp', () => ({}));
+jest.mock('../src/models/VerificationOtp', () => ({}));
 
-const User = require('../models/User');
-const authController = require('../controllers/authController');
+const User = require('../src/models/User');
+const authController = require('../src/controllers/authController');
 
 const createResponse = () => {
   const res = {

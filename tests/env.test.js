@@ -1,6 +1,6 @@
 function loadEnv() {
   jest.resetModules();
-  return require('../config/env');
+  return require('../src/config/env');
 }
 
 function restoreEnv(previousValues) {

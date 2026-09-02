@@ -1,6 +1,6 @@
 const http = require('node:http');
 const express = require('express');
-const createRateLimiter = require('../middleware/rateLimiter');
+const createRateLimiter = require('../src/middleware/rateLimiter');
 
 test('API rate limiter blocks requests after the configured limit', async () => {
   const app = express();

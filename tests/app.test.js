@@ -1,5 +1,5 @@
 const http = require('node:http');
-const app = require('../app');
+const app = require('../src/app');
 
 test('GET / returns the backend running message', async () => {
   const server = http.createServer(app);
